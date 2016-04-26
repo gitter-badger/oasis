@@ -1,3 +1,3 @@
-VarString     myocamlbuild_ml     "MyOCamlbuildSys.ml"
-VarString     ocamlbuildsys_ml    "OCamlbuildSys.ml"
-VarStringList readme_template_mkd "MANUAL-template.mkd"
+VarString     myocamlbuild_findlib_ml "MyOCamlbuildFindlib.ml"
+VarString     myocamlbuild_base_ml    "MyOCamlbuildBase.ml"
+VarStringList readme_template_mkd     "MANUAL-template.mkd"

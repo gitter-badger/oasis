@@ -26,20 +26,17 @@
 *)
 
 
-TYPE_CONV_PATH "OASISLicense"
+type license = string
 
 
-type license = string with odn
-
-
-type license_exception = string with odn
+type license_exception = string
 
 
 type license_version =
   | Version of OASISVersion.t
   | VersionOrLater of OASISVersion.t
   | NoVersion
-with odn
+
 
 
 type license_dep_5_unit =
@@ -48,19 +45,19 @@ type license_dep_5_unit =
     excption:  license_exception option;
     version:   license_version;
   }
-with odn
+
 
 
 type license_dep_5 =
   | DEP5Unit of license_dep_5_unit
   | DEP5Or of license_dep_5 list
   | DEP5And of license_dep_5 list
-with odn
+
 
 type t =
   | DEP5License of license_dep_5
   | OtherLicense of string (* URL *)
-with odn
+
 
 
 (* END EXPORT *)

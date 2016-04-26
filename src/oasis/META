@@ -21,26 +21,15 @@
 ################################################################################
 
 # OASIS_START
-# DO NOT EDIT (digest: c8ec96e46898eb76b05e345368fff4b5)
+# DO NOT EDIT (digest: 9abb129490ad61d036b4438f206f322f)
 version = "0.4.6"
 description = "_oasis file functions"
-requires = "unix odn"
+requires = "unix"
 archive(byte) = "oasis.cma"
 archive(byte, plugin) = "oasis.cma"
 archive(native) = "oasis.cmxa"
 archive(native, plugin) = "oasis.cmxs"
 exists_if = "oasis.cma"
-package "dynrun" (
- version = "0.4.6"
- description = "_oasis file functions"
- requires = "oasis.base oasis.builtin-plugins"
- archive(byte) = "dynrun.cma"
- archive(byte, plugin) = "dynrun.cma"
- archive(native) = "dynrun.cmxa"
- archive(native, plugin) = "dynrun.cmxs"
- exists_if = "dynrun.cma"
-)
-
 package "cli" (
  version = "0.4.6"
  description = "'setup.ml' modules for OASIS"

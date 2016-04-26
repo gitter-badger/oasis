@@ -20,17 +20,13 @@
 (* Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA              *)
 (******************************************************************************)
 
-
-TYPE_CONV_PATH "OASISExpr"
-
-
 open OASISGettext
 
 
-type test = string with odn
+type test = string
 
 
-type flag = string with odn
+type flag = string
 
 
 type t =
@@ -40,10 +36,10 @@ type t =
   | EOr of t * t
   | EFlag of flag
   | ETest of test * string
-with odn
 
 
-type 'a choices = (t * 'a) list with odn
+
+type 'a choices = (t * 'a) list
 
 
 let eval var_get t =
@@ -93,7 +89,7 @@ let choose ?printer ?name var_get lst =
             String.concat
               (s_ ", ")
               (List.map
-                 (fun (cond, vl) ->
+                 (fun (_cond, vl) ->
                     match printer with
                       | Some p -> p vl
                       | None -> s_ "<no printer>")
@@ -178,9 +174,9 @@ let rec reduce e =
     | EAnd (e, EBool true) | EAnd (EBool true, e)
     | EOr (e, EBool false) | EOr (EBool false, e) ->
       e
-    | EAnd (e, EBool false) | EAnd (EBool false, e) ->
+    | EAnd (_, EBool false) | EAnd (EBool false, _) ->
       EBool false
-    | EOr (e, EBool true) | EOr (EBool true, e) ->
+    | EOr (_, EBool true) | EOr (EBool true, _) ->
       EBool true
     | ENot (EBool true) ->
       EBool false

@@ -61,31 +61,7 @@ let depends_from_file env build ?(fmod=fun x -> x) fn =
       depends_lst
 ;;
 
-let ocamlmod_str = "ocamlmod";;
-let ocamlmod = A ocamlmod_str;;
-
-rule "ocamlmod: %.mod -> %.ml"
-  ~prod:"%.ml"
-  ~dep:"%.mod"
-  begin
-    fun env build ->
-      let modfn =
-        env "%.mod"
-      in
-      let dirname =
-        Pathname.dirname modfn
-      in
-        depends_from_file
-          env
-          build
-          ~fmod:(fun fn -> dirname/fn)
-          modfn;
-        Cmd(S[ocamlmod;
-              P(modfn)])
-  end
-;;
-
-let ocamlify = A"ocamlify";;
+let ocamlify = A(Filename.concat (Sys.getcwd()) "/src/tools/oasis_ocamlify.ml");;
 
 rule "ocamlify: %.mlify -> %.mlify.depends"
   ~prod:"%.mlify.depends"
@@ -114,7 +90,7 @@ rule "ocamlify: %.mlify & %.mlify.depends -> %.ml"
 ;;
 
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 8e712ffc501d26ff1464a081409919f4) *)
+(* DO NOT EDIT (digest: 3e80f92e6f6a98f763cd2cb1e391d6b9) *)
 module OASISGettext = struct
 # 22 "src/oasis/OASISGettext.ml"
 
@@ -256,10 +232,12 @@ module BaseEnvLight = struct
 
 
   let default_filename =
-    lazy (Filename.concat (Sys.getcwd ()) "setup.data")
+    Filename.concat
+      (Sys.getcwd ())
+      "setup.data"
 
 
-  let load ?(allow_empty=false) ?(filename=Lazy.force default_filename) () =
+  let load ?(allow_empty=false) ?(filename=default_filename) () =
     if Sys.file_exists filename then
       begin
         let chn =
@@ -347,7 +325,7 @@ module BaseEnvLight = struct
 end
 
 
-# 235 "myocamlbuild.ml"
+# 237 "myocamlbuild.ml"
 module MyOCamlbuildFindlib = struct
 # 22 "src/plugins/ocamlbuild/MyOCamlbuildFindlib.ml"
 
@@ -377,8 +355,7 @@ module MyOCamlbuildFindlib = struct
 
   let exec_from_conf exec =
     let exec =
-      let env_filename =
-        Pathname.basename (Lazy.force BaseEnvLight.default_filename) in
+      let env_filename = Pathname.basename BaseEnvLight.default_filename in
       let env = BaseEnvLight.load ~filename:env_filename ~allow_empty:true () in
       try
         BaseEnvLight.var_get exec env
@@ -470,45 +447,43 @@ module MyOCamlbuildFindlib = struct
 
       | After_rules ->
 
-          (* Avoid warnings for unused tag *)
-          flag ["tests"] N;
-
           (* When one link an OCaml library/binary/package, one should use
            * -linkpkg *)
           flag ["ocaml"; "link"; "program"] & A"-linkpkg";
 
-          (* For each ocamlfind package one inject the -package option when
-           * compiling, computing dependencies, generating documentation and
-           * linking. *)
-          List.iter
-            begin fun pkg ->
-              let base_args = [A"-package"; A pkg] in
-              (* TODO: consider how to really choose camlp4o or camlp4r. *)
-              let syn_args = [A"-syntax"; A "camlp4o"] in
-              let (args, pargs) =
-                (* Heuristic to identify syntax extensions: whether they end in
-                   ".syntax"; some might not.
-                *)
-                if not (conf.no_automatic_syntax) &&
-                   (Filename.check_suffix pkg "syntax" ||
-                    List.mem pkg well_known_syntax) then
-                  (syn_args @ base_args, syn_args)
-                else
-                  (base_args, [])
-              in
-              flag ["ocaml"; "compile";  "pkg_"^pkg] & S args;
-              flag ["ocaml"; "ocamldep"; "pkg_"^pkg] & S args;
-              flag ["ocaml"; "doc";      "pkg_"^pkg] & S args;
-              flag ["ocaml"; "link";     "pkg_"^pkg] & S base_args;
-              flag ["ocaml"; "infer_interface"; "pkg_"^pkg] & S args;
+          if not (conf.no_automatic_syntax) then begin
+            (* For each ocamlfind package one inject the -package option when
+             * compiling, computing dependencies, generating documentation and
+             * linking. *)
+            List.iter
+              begin fun pkg ->
+                let base_args = [A"-package"; A pkg] in
+                (* TODO: consider how to really choose camlp4o or camlp4r. *)
+                let syn_args = [A"-syntax"; A "camlp4o"] in
+                let (args, pargs) =
+                  (* Heuristic to identify syntax extensions: whether they end in
+                     ".syntax"; some might not.
+                  *)
+                  if Filename.check_suffix pkg "syntax" ||
+                     List.mem pkg well_known_syntax then
+                    (syn_args @ base_args, syn_args)
+                  else
+                    (base_args, [])
+                in
+                flag ["ocaml"; "compile";  "pkg_"^pkg] & S args;
+                flag ["ocaml"; "ocamldep"; "pkg_"^pkg] & S args;
+                flag ["ocaml"; "doc";      "pkg_"^pkg] & S args;
+                flag ["ocaml"; "link";     "pkg_"^pkg] & S base_args;
+                flag ["ocaml"; "infer_interface"; "pkg_"^pkg] & S args;
 
-              (* TODO: Check if this is allowed for OCaml < 3.12.1 *)
-              flag ["ocaml"; "compile";  "package("^pkg^")"] & S pargs;
-              flag ["ocaml"; "ocamldep"; "package("^pkg^")"] & S pargs;
-              flag ["ocaml"; "doc";      "package("^pkg^")"] & S pargs;
-              flag ["ocaml"; "infer_interface"; "package("^pkg^")"] & S pargs;
-            end
-            (find_packages ());
+                (* TODO: Check if this is allowed for OCaml < 3.12.1 *)
+                flag ["ocaml"; "compile";  "package("^pkg^")"] & S pargs;
+                flag ["ocaml"; "ocamldep"; "package("^pkg^")"] & S pargs;
+                flag ["ocaml"; "doc";      "package("^pkg^")"] & S pargs;
+                flag ["ocaml"; "infer_interface"; "package("^pkg^")"] & S pargs;
+              end
+              (find_packages ());
+          end;
 
           (* Like -package but for extensions syntax. Morover -syntax is useless
            * when linking. *)
@@ -532,12 +507,10 @@ module MyOCamlbuildFindlib = struct
           flag ["ocaml"; "pkg_threads"; "doc"] (S[A "-I"; A "+threads"]);
           flag ["ocaml"; "pkg_threads"; "link"] (S[A "-thread"]);
           flag ["ocaml"; "pkg_threads"; "infer_interface"] (S[A "-thread"]);
-          flag ["c"; "pkg_threads"; "compile"] (S[A "-thread"]);
           flag ["ocaml"; "package(threads)"; "compile"] (S[A "-thread"]);
           flag ["ocaml"; "package(threads)"; "doc"] (S[A "-I"; A "+threads"]);
           flag ["ocaml"; "package(threads)"; "link"] (S[A "-thread"]);
           flag ["ocaml"; "package(threads)"; "infer_interface"] (S[A "-thread"]);
-          flag ["c"; "package(threads)"; "compile"] (S[A "-thread"]);
 
       | _ ->
           ()
@@ -581,7 +554,8 @@ module MyOCamlbuildBase = struct
 
 
   let env_filename =
-    lazy (Pathname.basename (Lazy.force BaseEnvLight.default_filename))
+    Pathname.basename
+      BaseEnvLight.default_filename
 
 
   let dispatch_combine lst =
@@ -602,7 +576,7 @@ module MyOCamlbuildBase = struct
   let dispatch t e =
     let env =
       BaseEnvLight.load
-        ~filename:(Lazy.force env_filename)
+        ~filename:env_filename
         ~allow_empty:true
         ()
     in
@@ -720,7 +694,7 @@ module MyOCamlbuildBase = struct
 end
 
 
-# 608 "myocamlbuild.ml"
+# 606 "myocamlbuild.ml"
 open Ocamlbuild_plugin;;
 let package_default =
   {
@@ -741,7 +715,6 @@ let package_default =
                "src/plugins/omake"
             ],
             []);
-          ("dynrun", ["src/dynrun"], []);
           ("plugin-loader", ["src/ext/plugin-loader/src"], []);
           ("cli", ["src/cli"], []);
           ("pluginloaderLib",
@@ -894,19 +867,6 @@ let package_default =
                "src/ext/plugin-loader/test/data/findlib/pluginloaderLib"
             ]);
           ("src/ext/plugin-loader/test", ["src/ext/plugin-loader/src"]);
-          ("src/dynrun",
-            [
-               "src";
-               "src/base";
-               "src/plugins/custom";
-               "src/plugins/extra/META";
-               "src/plugins/extra/devfiles";
-               "src/plugins/extra/stdfiles";
-               "src/plugins/internal";
-               "src/plugins/none";
-               "src/plugins/ocamlbuild";
-               "src/plugins/omake"
-            ]);
           ("src/cli",
             [
                "src";
@@ -944,9 +904,8 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 833 "myocamlbuild.ml"
+# 817 "myocamlbuild.ml"
 (* OASIS_STOP *)
-
 open Ocamlbuild_plugin;;
 
 dispatch
@@ -964,7 +923,7 @@ dispatch
                         "gettext"
                         (BaseEnvLight.load
                            ~allow_empty:true
-                           ~filename:(Lazy.force MyOCamlbuildBase.env_filename)
+                           ~filename:MyOCamlbuildBase.env_filename
                            ())
                     in
                     let ppopt_flag, gettext_base_flag, gettext_stub_flag =

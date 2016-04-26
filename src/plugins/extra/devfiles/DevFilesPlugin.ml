@@ -119,12 +119,8 @@ let main ctxt pkg =
   let t =
     generator pkg.schema_data
   in
-  let (makefile_setup_deps, packages) =
-    match ctxt.update with
-      | OASISSetupUpdate.Dynamic -> (" _oasis", " -linkpkg -package oasis.dynrun")
-      | OASISSetupUpdate.Weak -> (" _oasis", "")
-      | OASISSetupUpdate.NoUpdate -> ("", "")
-  in
+  (* FIXME: still depend on some library for setup? *)
+  let makefile_setup_deps, packages = "_oasis", "" in
   let compiled_setup_ml =
     OASISFeatures.package_test OASISFeatures.compiled_setup_ml pkg
   in

@@ -28,14 +28,11 @@ open BaseEnv
 open OASISGettext
 open OASISTypes
 
-
-    TYPE_CONV_PATH "OMakeFields"
-
 type run_t =
   {
     run_path : unix_dirname;   (* "doc" only *)
     extra_args: string list;
-  } with odn
+  } 
 
 let string_of_format =
   function

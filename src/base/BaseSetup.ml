@@ -55,8 +55,6 @@ type t =
     oasis_version:    string;
     oasis_digest:     Digest.t option;
     oasis_exec:       string option;
-    oasis_setup_args: string list;
-    setup_update:     bool;
   }
 
 
@@ -356,131 +354,6 @@ let update_setup_ml, no_update_setup_ml_cli =
 
 let default_oasis_fn = "_oasis"
 
-
-let update_setup_ml t =
-  let oasis_fn =
-    match t.oasis_fn with
-      | Some fn -> fn
-      | None -> default_oasis_fn
-  in
-  let oasis_exec =
-    match t.oasis_exec with
-      | Some fn -> fn
-      | None -> "oasis"
-  in
-  let ocaml =
-    Sys.executable_name
-  in
-  let setup_ml, args =
-    match Array.to_list Sys.argv with
-      | setup_ml :: args ->
-        setup_ml, args
-      | [] ->
-        failwith
-          (s_ "Expecting non-empty command line arguments.")
-  in
-  let ocaml, setup_ml =
-    if Sys.executable_name = Sys.argv.(0) then
-      (* We are not running in standard mode, probably the script
-       * is precompiled.
-      *)
-      "ocaml", "setup.ml"
-    else
-      ocaml, setup_ml
-  in
-  let no_update_setup_ml_cli, _, _ = no_update_setup_ml_cli in
-  let do_update () =
-    let oasis_exec_version =
-      OASISExec.run_read_one_line
-        ~ctxt:!BaseContext.default
-        ~f_exit_code:
-          (function
-            | 0 ->
-              ()
-            | 1 ->
-              failwithf
-                (f_ "Executable '%s' is probably an old version \
-                     of oasis (< 0.3.0), please update to version \
-                     v%s.")
-                oasis_exec t.oasis_version
-            | 127 ->
-              failwithf
-                (f_ "Cannot find executable '%s', please install \
-                     oasis v%s.")
-                oasis_exec t.oasis_version
-            | n ->
-              failwithf
-                (f_ "Command '%s version' exited with code %d.")
-                oasis_exec n)
-        oasis_exec ["version"]
-    in
-    if OASISVersion.comparator_apply
-        (OASISVersion.version_of_string oasis_exec_version)
-        (OASISVersion.VGreaterEqual
-           (OASISVersion.version_of_string t.oasis_version)) then
-      begin
-        (* We have a version >= for the executable oasis, proceed with
-         * update.
-        *)
-        (* TODO: delegate this check to 'oasis setup'. *)
-        if Sys.os_type = "Win32" then
-          failwithf
-            (f_ "It is not possible to update the running script \
-                 setup.ml on Windows. Please update setup.ml by \
-                 running '%s'.")
-            (String.concat " " (oasis_exec :: "setup" :: t.oasis_setup_args))
-        else
-          begin
-            OASISExec.run
-              ~ctxt:!BaseContext.default
-              ~f_exit_code:
-                (function
-                  | 0 ->
-                    ()
-                  | n ->
-                    failwithf
-                      (f_ "Unable to update setup.ml using '%s', \
-                           please fix the problem and retry.")
-                      oasis_exec)
-              oasis_exec ("setup" :: t.oasis_setup_args);
-            OASISExec.run ~ctxt:!BaseContext.default ocaml (setup_ml :: args)
-          end
-      end
-    else
-      failwithf
-        (f_ "The version of '%s' (v%s) doesn't match the version of \
-             oasis used to generate the %s file. Please install at \
-             least oasis v%s.")
-        oasis_exec oasis_exec_version setup_ml t.oasis_version
-  in
-
-  if !update_setup_ml then
-    begin
-      try
-        match t.oasis_digest with
-          | Some dgst ->
-            if Sys.file_exists oasis_fn &&
-               dgst <> Digest.file default_oasis_fn then
-              begin
-                do_update ();
-                true
-              end
-            else
-              false
-          | None ->
-            false
-      with e ->
-        error
-          (f_ "Error when updating setup.ml. If you want to avoid this error, \
-               you can bypass the update of %s by running '%s %s %s %s'")
-          setup_ml ocaml setup_ml no_update_setup_ml_cli
-          (String.concat " " args);
-        raise e
-    end
-  else
-    false
-
-
 let setup t =
   let catch_exn =
     ref true
@@ -566,11 +439,6 @@ let setup t =
            Arg.Clear catch_exn,
            s_ " Don't catch exception, useful for debugging.";
          ]
-          @
-            (if t.setup_update then
-               [no_update_setup_ml_cli]
-             else
-               [])
           @ (BaseContext.args ())))
       (failwithf (f_ "Don't know what to do with '%s'"))
       (s_ "Setup and run build process current package\n");
@@ -613,10 +481,7 @@ let setup t =
 
     BaseDynVar.init t.package;
 
-    if t.setup_update && update_setup_ml t then
-      ()
-    else
-      !act_ref t (Array.of_list (List.rev !extra_args_ref))
+    !act_ref t (Array.of_list (List.rev !extra_args_ref))
 
   with e when !catch_exn ->
     error "%s" (Printexc.to_string e);
@@ -641,15 +506,13 @@ let find ctxt =
       default_filename
 
 
-let of_package ?oasis_fn ?oasis_exec ?(oasis_setup_args=[]) ~setup_update update pkg =
-
+let of_package ?oasis_fn ?oasis_exec pkg =
   let ctxt =
     (* Initial context *)
     {
       error         = false;
       other_actions = [];
       ctxt          = !BaseContext.default;
-      update        = update;
       files = OASISFileTemplate.create
           ~disable_oasis_section:pkg.disable_oasis_section
           ();
@@ -664,10 +527,10 @@ let of_package ?oasis_fn ?oasis_exec ?(oasis_setup_args=[]) ~setup_update update
     (Build.act pkg.build_type) ctxt pkg
   in
 
-  let ctxt, test_odn, test_changes =
-    let ctxt, test_odns, test_changes =
+  let ctxt, test_changes =
+    let ctxt, test_changes =
       List.fold_left
-        (fun ((ctxt, test_odns, test_changes) as acc) ->
+        (fun ((ctxt, test_changes) as acc) ->
            function
              | Test (cs, tst) ->
                begin
@@ -675,26 +538,21 @@ let of_package ?oasis_fn ?oasis_exec ?(oasis_setup_args=[]) ~setup_update update
                    (Test.act tst.test_type) ctxt pkg (cs, tst)
                  in
                  ctxt,
-                 (ODN.TPL [ODN.STR cs.cs_name;
-                           ODNFunc.odn_of_func chng.chng_main]
-                  ::
-                    test_odns),
                  (cs.cs_name, chng) :: test_changes
                end
-             | sct ->
+             | _sct ->
                acc)
-        (ctxt, [], [])
+        (ctxt, [])
         pkg.sections
     in
     ctxt,
-    ODN.LST (List.rev test_odns),
     List.rev test_changes
   in
 
-  let ctxt, doc_odn, doc_changes =
-    let ctxt, doc_odns, doc_changes =
+  let ctxt, doc_changes =
+    let ctxt, doc_changes =
       List.fold_left
-        (fun ((ctxt, doc_odns, doc_changes) as acc) ->
+        (fun ((ctxt, doc_changes) as acc) ->
            function
              | Doc (cs, doc) ->
                begin
@@ -702,19 +560,14 @@ let of_package ?oasis_fn ?oasis_exec ?(oasis_setup_args=[]) ~setup_update update
                    (Doc.act doc.doc_type) ctxt pkg (cs, doc)
                  in
                  ctxt,
-                 (ODN.TPL [ODN.STR cs.cs_name;
-                           ODNFunc.odn_of_func chng.chng_main]
-                  ::
-                    doc_odns),
                  (cs.cs_name, chng) :: doc_changes
                end
-             | sct ->
+             | _sct ->
                acc)
-        (ctxt, [], [])
+        (ctxt, [])
         pkg.sections
     in
     ctxt,
-    ODN.LST (List.rev doc_odns),
     List.rev doc_changes
   in
 
@@ -781,154 +634,38 @@ let of_package ?oasis_fn ?oasis_exec ?(oasis_setup_args=[]) ~setup_update update
     acc_non_opt_assoc distclean_of_changes test_changes
   in
 
-  let moduls =
-    (* Extract and deduplicate modules *)
-    let extract lst =
-      List.map (fun chng -> chng.chng_moduls) lst
-    in
-    let moduls =
-      List.flatten
-        ([
-          OASISData.oasissys_ml;
-          BaseData.basesysenvironment_ml;
-          BaseData.basesys_ml;
-        ]
-         ::
-           ((extract std_changes) @
-              (extract (List.map snd doc_changes)) @
-              (extract (List.map snd test_changes))))
-    in
-
-    let rmoduls, _ =
-      List.fold_left
-        (fun ((moduls, moduls_seen) as acc) modul ->
-           if SetString.mem modul moduls_seen then
-             acc
-           else
-             (modul :: moduls, SetString.add modul moduls_seen))
-        ([], SetString.empty)
-        moduls
-    in
-    List.rev rmoduls
-  in
-
   let oasis_digest =
     match oasis_fn with
       | None -> None
       | Some fn -> Some (Digest.file fn)
   in
 
-  let setup_t_odn, t =
+  let t =
     let setup_func_calls lst =
-      List.map (fun (nm, chng) -> nm, ODNFunc.func_call chng.chng_main) lst
+      List.map (fun (nm, chng) -> nm, chng.chng_main) lst
     in
     let func_calls lst =
-      List.map (fun (nm, func) -> nm, ODNFunc.func_call func) lst
+      List.map (fun (nm, func) -> nm, func) lst
     in
-    let odn_of_funcs lst =
-      ODN.LST (List.map ODNFunc.odn_of_func lst)
-    in
-    let odn_of_assocs lst =
-      ODN.LST
-        (List.map
-           (fun (nm, func) ->
-              ODN.TPL[ODN.STR nm; ODNFunc.odn_of_func func])
-           lst)
-    in
-    ODN.REC
-      ("BaseSetup",
-       [
-         "configure",      ODNFunc.odn_of_func configure_changes.chng_main;
-         "build",          ODNFunc.odn_of_func build_changes.chng_main;
-         "test",           test_odn;
-         "doc",            doc_odn;
-         "install",        ODNFunc.odn_of_func  install_changes.chng_main;
-         "uninstall",      ODNFunc.odn_of_func  uninstall_changes.chng_main;
-         "clean",          odn_of_funcs clean_funcs;
-         "clean_test",     odn_of_assocs clean_test_funcs;
-         "clean_doc",      odn_of_assocs clean_doc_funcs;
-         "distclean",      odn_of_funcs distclean_funcs;
-         "distclean_test", odn_of_assocs distclean_test_funcs;
-         "distclean_doc",  odn_of_assocs distclean_doc_funcs;
-         "package",        OASISTypes.odn_of_package pkg;
-         "oasis_fn",       ODN.of_option ODN.of_string oasis_fn;
-         "oasis_version",  OASISVersion.odn_of_t OASISConf.version_full;
-         "oasis_digest",   ODN.of_option ODN.of_string oasis_digest;
-         "oasis_exec",     ODN.of_option ODN.of_string oasis_exec;
-         "oasis_setup_args", ODN.of_list ODN.of_string oasis_setup_args;
-         "setup_update",   ODN.of_bool setup_update;
-       ]),
     {
-      configure        = ODNFunc.func_call configure_changes.chng_main;
-      build            = ODNFunc.func_call build_changes.chng_main;
+      configure        = configure_changes.chng_main;
+      build            = build_changes.chng_main;
       doc              = setup_func_calls doc_changes;
       test             = setup_func_calls test_changes;
-      install          = ODNFunc.func_call install_changes.chng_main;
-      uninstall        = ODNFunc.func_call uninstall_changes.chng_main;
-      clean            = List.map ODNFunc.func_call clean_funcs;
+      install          = install_changes.chng_main;
+      uninstall        = uninstall_changes.chng_main;
+      clean            = clean_funcs;
       clean_test       = func_calls clean_test_funcs;
       clean_doc        = func_calls clean_doc_funcs;
-      distclean        = List.map ODNFunc.func_call distclean_funcs;
+      distclean        = distclean_funcs;
       distclean_test   = func_calls distclean_test_funcs;
       distclean_doc    = func_calls distclean_doc_funcs;
       package          = pkg;
       oasis_fn         = oasis_fn;
-      oasis_version    = OASISVersion.string_of_version
-          OASISConf.version_full;
+      oasis_version    = OASISVersion.string_of_version OASISConf.version_full;
       oasis_digest     = oasis_digest;
       oasis_exec       = oasis_exec;
-      oasis_setup_args = oasis_setup_args;
-      setup_update     = setup_update;
     }
   in
 
-  (* Create setup file *)
-  let setup_t_str =
-    Format.fprintf Format.str_formatter
-      "@[<hv2>let setup_t =@ %a;;@]"
-      (ODN.pp_odn ~opened_modules:["OASISTypes"])
-      setup_t_odn;
-    Format.flush_str_formatter ()
-  in
-
-  let setup_tmpl =
-    OASISFileTemplate.template_of_mlfile
-      default_filename
-
-      (* Header *)
-      [
-        "(* "^default_filename^" generated for the first time by "^
-          "OASIS v"^(OASISVersion.string_of_version OASISConf.version_full)
-        ^" *)";
-        "";
-      ]
-      (* Body *)
-      (
-        [
-          "(*";
-          "   Regenerated by OASIS v"^(OASISVersion.string_of_version
-              OASISConf.version_full);
-          "   Visit http://oasis.forge.ocamlcore.org for more information and";
-          "   documentation about functions used in this file.";
-          "*)";
-        ]
-        @
-          moduls
-        @
-          [
-            "open OASISTypes;;";
-            "";
-            setup_t_str;
-            "";
-            "let setup () = BaseSetup.setup setup_t;;";
-            ""
-          ])
-
-      (* Footer *)
-      ["let () = setup ();;"]
-  in
-
-
-  {ctxt with
-     files = OASISFileTemplate.replace setup_tmpl ctxt.files},
-  t
+  ctxt, t

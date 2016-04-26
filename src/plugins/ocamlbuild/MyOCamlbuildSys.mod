@@ -1,2 +1,0 @@
-MyOCamlbuildFindlib.ml
-MyOCamlbuildBase.ml

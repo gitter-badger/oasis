@@ -109,6 +109,14 @@ val varname_concat: ?hyphen:char -> string -> string -> string
 *)
 val is_varname: string -> bool
 
+(** {2 Comparisons} *)
+module Ord : sig
+  type 'a t = 'a -> 'a -> int
+
+  (** [cmp1 a1 b1 <?> (cmp1, a2, b2)] is the lexical comparison
+      on [(a1,a2)] and [(b1,b2)]. *)
+  val (<?>) : int -> ('a t * 'a * 'a) -> int
+end
 
 (** {2 Fail with Printf.sprintf} *)
 

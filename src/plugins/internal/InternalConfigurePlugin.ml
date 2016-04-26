@@ -279,16 +279,12 @@ let init () =
   let self_id, _ =
     Configure.create plugin
   in
-  let doit ctxt pkg =
+  let doit ctxt _pkg =
     ctxt,
     {
-      chng_moduls    = [InternalData.internalsys_ml];
       chng_clean     = None;
       chng_distclean = None;
-      chng_main =
-        (ODNFunc.func
-           configure
-           "InternalConfigurePlugin.configure");
+      chng_main = configure;
     }
   in
   InternalId.init ();

@@ -21,9 +21,8 @@
 ################################################################################
 
 # OASIS_START
-# DO NOT EDIT (digest: 1f72f17551ed9241b5c309db1dbad600)
+# DO NOT EDIT (digest: 79777e7a4a95a7a6983038dcdccc61e2)
 oasis/FormatExt
-oasis/ODNFunc
 oasis/PropList
 oasis/OASISUtils
 oasis/OASISUnixPath
@@ -42,7 +41,6 @@ oasis/OASISBuildSection
 oasis/OASISDocument
 oasis/OASISExecutable
 oasis/OASISFlag
-oasis/OASISSetupUpdate
 oasis/OASISLibrary
 oasis/OASISObject
 oasis/OASISPackage
@@ -63,12 +61,10 @@ base/BaseArgExt
 base/BaseBuilt
 base/BaseCheck
 base/BaseCustom
-base/BaseData
 base/BaseDoc
 base/BaseEnvLight
 base/BaseEnv
 base/BaseFileAB
-base/BaseGenerate
 base/BaseLog
 base/BaseOCamlcConfig
 base/BaseSetup

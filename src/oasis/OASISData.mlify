@@ -1,4 +1,3 @@
-VarString oasissys_ml "OASISSys.ml"
-VarString oasissyslight_ml "OASISSysLight.ml"
-VarString oasissysbundle_ml "OASISSysBundle.ml"
+VarString     oasisgettext_ml "OASISGettext.ml"
+VarString     oasisexpr_ml    "OASISExpr.ml"
 VarStringList readme_template_mkd "MANUAL-template.mkd"

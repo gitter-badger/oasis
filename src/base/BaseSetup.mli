@@ -64,12 +64,6 @@ type t =
 
     oasis_exec:      string option;
     (** Name of oasis executable to use, only for testing. *)
-
-    oasis_setup_args: string list;
-    (** Args to use when updating the setup.ml. *)
-
-    setup_update: bool;
-    (** Are we allowed to update the setup.ml (eq. of -setup-update weak). *)
   }
 
 
@@ -155,8 +149,5 @@ val find: OASISPlugin.context_act -> OASISFileTemplate.template
 val of_package:
   ?oasis_fn:host_filename ->
   ?oasis_exec:host_filename ->
-  ?oasis_setup_args:string list ->
-  setup_update:bool ->
-  OASISSetupUpdate.t ->
   package ->
   OASISPlugin.context_act * t

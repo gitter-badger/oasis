@@ -24,13 +24,10 @@
 open OASISGettext
 
 
-    TYPE_CONV_PATH "OASISVersion"
-
-
 type s = string
 
 
-type t = string with odn
+type t = string 
 
 
 type comparator =
@@ -41,7 +38,7 @@ type comparator =
   | VLesserEqual of t
   | VOr of  comparator * comparator
   | VAnd of comparator * comparator
-with odn
+
 
 
 (* Range of allowed characters *)

@@ -35,13 +35,8 @@ open OCamlbuildCommon
 open BaseStandardVar
 open BaseMessage
 
-
-    TYPE_CONV_PATH "OCamlbuildPlugin"
-
-
 let cond_targets_hook =
   ref (fun lst -> lst)
-
 
 let build extra_args pkg argv =
   (* Return the filename in build directory *)
@@ -217,7 +212,6 @@ open OASISFileTemplate
 open OASISUtils
 open OASISMessage
 open OASISGettext
-open ODN
 open OASISPlugin
 open OASISTypes
 open OASISSchema
@@ -691,7 +685,7 @@ let compute_includes map_dirs pkg =
 
 
 (* Check if the given files list only contains .mli. *)
-let is_pure_interface (base_fn, fn_lst) =
+let is_pure_interface (_base_fn, fn_lst) =
   let rec is_pure_interface_aux =
     (* TODO: this needs to be refine because sometime we don't have the .ml file
      * because it is generated (BaseData.ml) but we have the .mli.
@@ -708,9 +702,7 @@ let is_pure_interface (base_fn, fn_lst) =
 
 let add_ocamlbuild_files ctxt pkg =
 
-  let map_dirs =
-    compute_map_dirs pkg
-  in
+  let map_dirs = compute_map_dirs pkg in
 
   let ctxt, tag_t, myocamlbuild_t =
     List.fold_left
@@ -1078,6 +1070,10 @@ let add_ocamlbuild_files ctxt pkg =
     }
   in
 
+  (* FIXME: here, instead of generating a myocamlbuild.ml, only generate
+     the .mllib, mldylib, odocl, _tag files
+     AND THEN call directly ocamlbuild through its API *)
+
   let tag_t =
     "# Ignore VCS directories, you can use the same kind of rule outside"
     ::
@@ -1112,11 +1108,14 @@ let add_ocamlbuild_files ctxt pkg =
           "myocamlbuild.ml"
           []
           [
-            OASISData.oasissyslight_ml;
+            OASISData.oasisgettext_ml;
+            OASISData.oasisexpr_ml;
             BaseData.basesysenvironment_ml;
-            OCamlbuildData.myocamlbuild_ml;
+            OCamlbuildData.myocamlbuild_findlib_ml;
+            OCamlbuildData.myocamlbuild_base_ml;
             "open Ocamlbuild_plugin;;";
             (
+              MyOCamlbuildBase.dispatch 
               Format.fprintf Format.str_formatter
                 "@[<hv2>let package_default =@ %a@,@];;"
                 (pp_odn ~opened_modules:["Ocamlbuild_plugin"])

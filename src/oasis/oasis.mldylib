@@ -21,9 +21,8 @@
 ################################################################################
 
 # OASIS_START
-# DO NOT EDIT (digest: 956bbf8934f72275c29c20c43c69ebdc)
+# DO NOT EDIT (digest: 01181e0056838d36224b386b7782a7b7)
 FormatExt
-ODNFunc
 PropList
 OASISUtils
 OASISUnixPath
@@ -42,7 +41,6 @@ OASISBuildSection
 OASISDocument
 OASISExecutable
 OASISFlag
-OASISSetupUpdate
 OASISLibrary
 OASISObject
 OASISPackage

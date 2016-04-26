@@ -644,22 +644,20 @@ let init () =
     Install.create plugin
   in
   (* Installation *)
-  let doit_install ctxt pkg =
+  let doit_install ctxt _pkg =
     ctxt,
     {
-      chng_moduls    = [InternalData.internalsys_ml];
-      chng_main      = ODNFunc.func install "InternalInstallPlugin.install";
+      chng_main      = install;
       chng_clean     = None;
       chng_distclean = None;
     }
   in
 
   (* Uninstall *)
-  let doit_uninstall ctxt pkg =
+  let doit_uninstall ctxt _pkg =
     ctxt,
     {
-      chng_moduls    = [InternalData.internalsys_ml];
-      chng_main      = ODNFunc.func uninstall "InternalInstallPlugin.uninstall";
+      chng_main      = uninstall;
       chng_clean     = None;
       chng_distclean = None;
     }

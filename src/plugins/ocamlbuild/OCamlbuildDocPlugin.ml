@@ -32,17 +32,14 @@ open OASISMessage
 open OCamlbuildCommon
 open BaseStandardVar
 
-
-    TYPE_CONV_PATH "OCamlbuildDocPlugin"
-
 type run_t =
   {
     extra_args: string list;
     run_path: unix_filename;
-  } with odn
+  } 
 
 
-let doc_build run pkg (cs, doc) argv =
+let doc_build run _pkg (cs, _doc) argv =
   let index_html =
     OASISUnixPath.make
       [
@@ -70,7 +67,7 @@ let doc_build run pkg (cs, doc) argv =
     ["*.html"; "*.css"]
 
 
-let doc_clean run pkg (cs, doc) argv =
+let doc_clean _run _pkg (cs, _doc) argv =
   run_clean argv;
   BaseBuilt.unregister BaseBuilt.BDoc cs.cs_name
 
@@ -296,22 +293,11 @@ let doit ctxt pkg (cs, doc) =
   in
   ctxt,
   {
-    chng_moduls =
-      [OCamlbuildData.ocamlbuildsys_ml];
+    chng_main = doc_build run;
 
-    chng_main =
-      ODNFunc.func_with_arg
-        doc_build "OCamlbuildDocPlugin.doc_build"
-        run odn_of_run_t;
+    chng_clean = Some (doc_clean run);
 
-    chng_clean =
-      Some
-        (ODNFunc.func_with_arg
-           doc_clean "OCamlbuildDocPlugin.doc_clean"
-           run odn_of_run_t);
-
-    chng_distclean =
-      None;
+    chng_distclean = None;
   }
 
 

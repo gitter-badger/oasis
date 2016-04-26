@@ -44,7 +44,7 @@ let update_fail _ _ =
 let blackbox =
   {
     parse  =
-      (fun ~ctxt s ->
+      (fun ~ctxt:_ s ->
          failwithf
            (f_ "Blackbox type cannot be set to the value '%s'")
            s);

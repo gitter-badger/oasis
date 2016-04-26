@@ -1,4 +1,5 @@
-VarString     omakesys_ml        "OMakeSys.ml"
+VarString     omakefields_ml     "OMakeFields.ml"
+VarString     omakeplugin_ml     "OMakePlugin.ml"
 VarStringList readme_template_mkd "MANUAL-template.mkd"
 VarString     oasis_lib_om       "oasis_lib.om"
 VarString     omakeroot          "OMakeroot.om"

@@ -157,6 +157,14 @@ let varname_concat ?(hyphen='_') p s =
 let is_varname str =
   str = varname_of_string str
 
+module Ord = struct
+  type 'a t = 'a -> 'a -> int
+  let (<?>) c (ord,x,y) =
+  if c = 0
+    then ord x y
+    else c
+end
+
 
 let failwithf fmt = Printf.ksprintf failwith fmt
 

@@ -53,7 +53,6 @@ if flag(gettext)
 Library oasis
   Path: src/oasis
   Modules: FormatExt,
-           ODNFunc,
            PropList,
            OASISUtils,
            OASISUnixPath,
@@ -72,7 +71,6 @@ Library oasis
            OASISDocument,
            OASISExecutable,
            OASISFlag,
-           OASISSetupUpdate,
            OASISLibrary,
            OASISObject,
            OASISPackage,
@@ -118,8 +116,8 @@ Library oasis
                    OASISSchema_intern,
                    OASISPath_intern
   CompiledObject: Best
-  BuildDepends: unix, odn (>= 0.0.11)
-  BuildTools+: ocamlmod, ocamlyacc, ocamllex, ocamlify
+  BuildDepends: unix (>= 0.0.11)
+  BuildTools+: ocamlyacc, ocamllex, oasis_ocamlify
   XMETADescription: _oasis file functions
   Install$: flag(libraries)
 
@@ -129,12 +127,10 @@ Library base
            BaseBuilt,
            BaseCheck,
            BaseCustom,
-           BaseData,
            BaseDoc,
            BaseEnvLight,
            BaseEnv,
            BaseFileAB,
-           BaseGenerate,
            BaseLog,
            BaseOCamlcConfig,
            BaseSetup,
@@ -195,13 +191,6 @@ Library cli
   FindlibParent:    oasis
   XMETADescription: 'setup.ml' modules for OASIS
   Install$:         flag(libraries)
-
-Library dynrun
-  Path:           src/dynrun
-  Modules:        OASISDynRun
-  CompiledObject: best
-  BuildDepends:   oasis.base, oasis.builtin-plugins
-  FindlibParent:  oasis
 
 Executable oasis
   Path:   src/cli

@@ -30,10 +30,7 @@ open BaseEnv
 open BaseStandardVar
 open OASISTypes
 
-
-    TYPE_CONV_PATH "OCamlbuildCommon"
-
-type extra_args = string list with odn
+type extra_args = string list 
 
 
 let ocamlbuild_clean_ev = "ocamlbuild-clean"
@@ -209,7 +206,7 @@ type ocamlbuild_common =
   {
     plugin_tags: string option;
     extra_args: string list;
-  } with odn
+  } 
 
 
 let ocamlbuild_common_generator pivot_data schm id =

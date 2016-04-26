@@ -71,10 +71,7 @@ struct
       (fun nm _ -> rlst := nm :: !rlst)
       t;
     !rlst
-
-  let odn_of_t t =
-    ODN.APP ("PropList.Data.create", [], [ODN.UNT])
-    (* START EXPORT *)
+  (* START EXPORT *)
 end
 
 
