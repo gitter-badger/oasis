@@ -21,40 +21,19 @@
 (******************************************************************************)
 
 
-open OASISContext
+(** Parse OASIS files using Genlex.
+    @author Sylvain Le Gall
+*)
 
+open OASISTypes
 
-let generic_message ~ctxt lvl fmt =
-  let cond =
-    if ctxt.quiet then
-      false
-    else
-      match lvl with
-        | `Debug -> ctxt.debug
-        | `Info  -> ctxt.info
-        | _ -> true
-  in
-  Printf.ksprintf
-    (fun str ->
-       if cond then
-         begin
-           ctxt.printf lvl str
-         end)
-    fmt
+type conf =
+  {
+    oasisfn: host_filename option;
+    ctxt:    OASISContext.t;
+  }
 
+type line_pos = int
+type char_pos = int
 
-let debug ~ctxt fmt =
-  generic_message ~ctxt `Debug fmt
-
-
-let info ~ctxt fmt =
-  generic_message ~ctxt `Info fmt
-
-
-let warning ~ctxt fmt =
-  generic_message ~ctxt `Warning fmt
-
-
-let error ~ctxt fmt =
-  generic_message ~ctxt `Error fmt
-
+val parse_stream : conf -> char Stream.t -> OASISAstTypes.top_stmt

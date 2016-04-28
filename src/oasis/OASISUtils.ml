@@ -29,6 +29,8 @@ struct
   module type S =
   sig
     include Map.S
+    val find_opt : key -> 'a t -> 'a option
+    val find_or : 'a -> key -> 'a t ->  'a
     val add_list: 'a t -> (key * 'a) list -> 'a t
     val of_list: (key * 'a) list -> 'a t
     val to_list: 'a t -> (key * 'a) list
@@ -37,6 +39,14 @@ struct
   module Make (Ord: Map.OrderedType) =
   struct
     include Map.Make(Ord)
+
+    let find_opt k m =
+      try Some (find k m)
+      with Not_found -> None
+
+    let find_or def k m =
+      try find k m
+      with Not_found -> def
 
     let rec add_list t =
       function
@@ -105,6 +115,65 @@ module SetStringCsl =
       let compare = compare_csl
     end)
 
+module Seq = struct
+  type 'a t = ('a -> unit) -> unit
+  let empty _ = ()
+  let return x k = k x
+  let cons x seq k = k x; seq k
+  let map f seq k = seq (fun x -> k (f x))
+  let flat_map f seq k = seq (fun x -> f x k)
+  let filter_map f seq k =
+    seq (fun x -> match f x with
+      | None -> ()
+      | Some y -> k y)
+  let filter p seq k = seq (fun x -> if p x then k x)
+  let fold f init seq =
+    let r = ref init in
+    seq (fun elt -> r := f !r elt);
+    !r
+  let of_list l k = List.iter k l
+  let to_list seq = List.rev (fold (fun y x -> x::y) [] seq)
+  let to_list_rev seq = fold (fun y x -> x :: y) [] seq
+end
+
+module Pair = struct
+  type ('a, 'b) t = 'a * 'b
+  let swap (x,y) = y,x
+end
+
+module L = struct
+  let init len f =
+    let rec init_rec acc i f =
+      if i=0 then f i :: acc
+      else init_rec (f i :: acc) (i-1) f
+    in
+    if len<0 then invalid_arg "init"
+    else if len=0 then []
+    else init_rec [] (len-1) f
+
+  let filter_map f l =
+    let rec recurse acc l = match l with
+      | [] -> List.rev acc
+      | x::l' ->
+        let acc' = match f x with | None -> acc | Some y -> y::acc in
+        recurse acc' l'
+    in recurse [] l
+
+  let flat_map f l =
+    let rec aux f l kont = match l with
+      | [] -> kont []
+      | x::l' ->
+        let y = f x in
+        let kont' tail = match y with
+          | [] -> kont tail
+          | [x] -> kont (x :: tail)
+          | [x;y] -> kont (x::y::tail)
+          | l -> kont (l @ tail)
+        in
+        aux f l' kont'
+    in
+    aux f l (fun l->l)
+end
 
 let varname_of_string ?(hyphen='_') s =
   if String.length s = 0 then
@@ -168,9 +237,21 @@ end
 
 let failwithf fmt = Printf.ksprintf failwith fmt
 
+let finally ~h ~f x =
+  try
+    let res = f x in
+    h x;
+    res
+  with e ->
+    h x;
+    raise e
 
 (* END EXPORT *)
 
+module Infix = struct
+  let (|>) x f = f x
+end
+include Infix
 
 let may f =
   function
@@ -396,4 +477,34 @@ struct
       if last <> "" then rargs := last :: !rargs
     in
     List.rev_map unprotect_subst !rargs
+end
+
+module IO = struct
+  let read_lines ic =
+    let lst = ref [] in
+    begin
+      try
+        while true do
+          lst := input_line ic :: !lst
+        done
+      with End_of_file ->
+        ()
+    end;
+    List.rev !lst
+
+  let with_file_in
+      ?(flags=[Open_binary; Open_rdonly]) ?(perm=0o644) file f
+    =
+    let ic = open_in_gen flags perm file in
+    finally ~h:close_in_noerr ~f ic
+
+  let with_file_out
+      ?(flags=[Open_append; Open_creat; Open_binary; Open_wronly])
+      ?(perm=0o644) file f
+    =
+    let oc = open_out_gen flags perm file in
+    finally ~h:close_out_noerr ~f oc
+
+  let output_line oc s = output_string oc s; output_char oc '\n'
+  let output_lines oc l = List.iter (output_line oc) l
 end

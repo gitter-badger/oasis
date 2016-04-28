@@ -28,7 +28,6 @@ type test = string
 
 type flag = string
 
-
 type t =
   | EBool of bool
   | ENot of t
@@ -37,41 +36,31 @@ type t =
   | EFlag of flag
   | ETest of test * string
 
-
-
 type 'a choices = (t * 'a) list
 
+module EMap = OASISUtils.MapExt.Make(struct
+    type t_ = t
+    type t = t_
+    let compare = Pervasives.compare
+  end)
 
 let eval var_get t =
   let rec eval' =
     function
-      | EBool b ->
-        b
-
-      | ENot e ->
-        not (eval' e)
-
-      | EAnd (e1, e2) ->
-        (eval' e1) && (eval' e2)
-
-      | EOr (e1, e2) ->
-        (eval' e1) || (eval' e2)
-
+      | EBool b -> b
+      | ENot e -> not (eval' e)
+      | EAnd (e1, e2) -> (eval' e1) && (eval' e2)
+      | EOr (e1, e2) -> (eval' e1) || (eval' e2)
       | EFlag nm ->
-        let v =
-          var_get nm
-        in
+        let v = var_get nm in
         assert(v = "true" || v = "false");
-        (v = "true")
+        v = "true"
 
       | ETest (nm, vl) ->
-        let v =
-          var_get nm
-        in
-        (v = vl)
+        let v = var_get nm in
+        v = vl
   in
   eval' t
-
 
 let choose ?printer ?name var_get lst =
   let rec choose_aux =
@@ -126,18 +115,14 @@ let tests =
   ]
 
 
-let test_of_string str =
-  (* TODO: check for correct syntax of str *)
-  str
+(* TODO: check for correct syntax of str *)
+let test_of_string str = str
 
-
-let string_of_test t =
-  t
-
+let string_of_test t = t
 
 let check valid_flags =
   let lowercase_eq str1 str2 =
-    (String.lowercase str1) = (String.lowercase str2)
+    String.lowercase str1 = String.lowercase str2
   in
 
   let rec check_aux valid_flags =
@@ -156,7 +141,6 @@ let check valid_flags =
         ()
   in
   check_aux valid_flags
-
 
 let rec reduce e =
   let e =
@@ -188,35 +172,23 @@ let rec reduce e =
       | (EBool _)) as e ->
       e
 
-
 let reduce_choices choices =
   (* Naive reduction, we only look for exactly the same condition in
    * after one condition. It works but is not complete and not efficient
   *)
   let rec reduce_choices_aux acc lst =
     match lst with
-      | (c1, _) as e :: tl ->
-        (
-          let acc =
-            try
-              let _ =
-                List.find
-                  (fun (c2, _) -> c1 = c2)
-                  tl
-              in
-              acc
-            with Not_found ->
-              e :: acc
-          in
-          reduce_choices_aux acc tl
-        )
+      | (c, x) :: tl ->
+        let c = reduce c in
+        (* only add [c -> x] if [c] is not already in the map *)
+        let acc =
+          if EMap.mem c acc then acc else EMap.add c x acc
+        in
+        reduce_choices_aux acc tl
       | [] ->
-        List.rev acc
+        EMap.to_list acc
   in
-  reduce_choices_aux
-    []
-    (List.map (fun (cond, vl) -> reduce cond, vl) choices)
-
+  reduce_choices_aux EMap.empty choices
 
 let if_then_else t choices_if choices_else =
   let choices_if' =
@@ -226,7 +198,6 @@ let if_then_else t choices_if choices_else =
     List.rev_map (fun (t', v) -> EAnd (ENot t, t'), v) choices_else
   in
   reduce_choices (List.rev_append choices_else' (List.rev choices_if'))
-
 
 let rec to_string =
   function
@@ -251,7 +222,9 @@ let rec to_string =
     | EAnd (e1, e2) ->
       (to_string e1)^" && "^(to_string e2)
 
-
 let string_of_choices f lst =
-  "["^(String.concat "; "
-      (List.rev_map (fun (e, vl) -> (to_string e)^" -> "^(f vl)) lst))^"]"
+  let pp_pair out (e,vl) =
+    Format.fprintf out "@[%s -> %s@]" (to_string e) (f vl)
+  in
+  FormatExt.asprintf
+    "[@[%a@]]" (FormatExt.pp_print_list pp_pair ", ") lst

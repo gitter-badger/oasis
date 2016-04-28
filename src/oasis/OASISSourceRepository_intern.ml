@@ -28,9 +28,7 @@
 
 open OASISSchema_intern
 open OASISValues
-open OASISUtils
 open OASISGettext
-open PropList.Field
 open OASISTypes
 
 

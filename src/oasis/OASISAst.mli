@@ -21,40 +21,10 @@
 (******************************************************************************)
 
 
-open OASISContext
+(** AST manipulation
+    @author Sylvain Le Gall
+*)
 
+open OASISTypes
 
-let generic_message ~ctxt lvl fmt =
-  let cond =
-    if ctxt.quiet then
-      false
-    else
-      match lvl with
-        | `Debug -> ctxt.debug
-        | `Info  -> ctxt.info
-        | _ -> true
-  in
-  Printf.ksprintf
-    (fun str ->
-       if cond then
-         begin
-           ctxt.printf lvl str
-         end)
-    fmt
-
-
-let debug ~ctxt fmt =
-  generic_message ~ctxt `Debug fmt
-
-
-let info ~ctxt fmt =
-  generic_message ~ctxt `Info fmt
-
-
-let warning ~ctxt fmt =
-  generic_message ~ctxt `Warning fmt
-
-
-let error ~ctxt fmt =
-  generic_message ~ctxt `Error fmt
-
+val to_package : OASISRecDescParser.conf -> char Stream.t -> package

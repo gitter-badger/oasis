@@ -29,7 +29,7 @@ open OASISTypes
 let plugin_compare (k1, n1, vo1) (k2, n2, vo2) =
   let cmp_versions vo1 vo2 = match vo1, vo2 with
       | Some v1, Some v2 -> OASISVersion.version_compare v1 v2
-      | None, _ | _, None -> 0 
+      | None, _ | _, None -> 0
   in
   let open OASISUtils.Ord in
   compare k1 k2
@@ -302,12 +302,9 @@ let register_generator_package t (prop_set, _) generator =
 
 let generator_package plg rplugin_data data =
   try
-    let lst =
-      HashPlugin.find_all gen_all plg
-    in
+    let lst = HashPlugin.find_all gen_all plg in
     List.iter
-      (fun gen ->
-         gen rplugin_data data)
+      (fun gen -> gen rplugin_data data)
       lst
   with Not_found ->
     ()
@@ -324,9 +321,7 @@ let register_generator_section knd t (prop_set, _) generator =
 
 let generator_section knd plg rplugin_data data =
   try
-    let lst =
-      HashPlugin.find_all gen_section plg
-    in
+    let lst = HashPlugin.find_all gen_section plg in
     List.iter
       (fun (knd', gen) ->
          if knd = knd' then
@@ -348,8 +343,7 @@ let ls knd =
     []
 
 
-let to_plugin t =
-  t
+let to_plugin t = t
 
 
 module type PLUGINS =
@@ -450,9 +444,7 @@ struct
 
   (** Parse value *)
   let value =
-    let kind_default :> plugin_kind =
-      F.kind_default
-    in
+    let kind_default :> plugin_kind = F.kind_default in
 
     let not_found_of_kind =
       function
@@ -509,9 +501,7 @@ struct
     }
 
   let quickstart_question () =
-    let knd :> plugin_kind =
-      F.kind_default
-    in
+    let knd :> plugin_kind = F.kind_default in
     ExclusiveChoices
       (HashPluginGlobal.fold
          (fun (knd', nm, vo) _ lst ->
@@ -615,9 +605,7 @@ let test_field_name nm =
 (** Create value for a builtin plugin
 *)
 let builtin knd nm =
-  let builtin_version =
-    Some OASISConf.version_short
-  in
+  let builtin_version = Some OASISConf.version_short in
   knd, nm, builtin_version
 
 

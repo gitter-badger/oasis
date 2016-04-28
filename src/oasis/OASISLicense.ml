@@ -133,7 +133,6 @@ let long_name_of_license_dep_5 license_dep_5 =
   with Not_found ->
     string_of_license_dep_5 license_dep_5
 
-
 let mk_license nm ?(versions=[]) ?deprecated ?note long_name =
   let rec expand_version =
     function
@@ -199,7 +198,6 @@ let mk_license nm ?(versions=[]) ?deprecated ?note long_name =
   all_licenses := (nm, t) :: !all_licenses;
   nm
 
-
 let license_data () =
   let lst =
     List.map
@@ -215,7 +213,6 @@ let license_data () =
       !all_licenses
   in
   List.sort (fun (nm1, _) (nm2, _) -> compare_csl nm1 nm2) lst
-
 
 let proprietary =
   mk_license
@@ -600,7 +597,7 @@ let parse ~ctxt str =
     end
 
 
-let rec string_of_dep_5_generic f dep_5 =
+let string_of_dep_5_generic f dep_5 =
   let rec dep_5_str =
     function
       | DEP5Unit t  ->
@@ -686,10 +683,7 @@ let choices () =
   in
 
   let exception_find license mp =
-    try
-      MapString.find license mp
-    with Not_found ->
-      []
+    MapString.find_or [] license mp
   in
 
   let exceptions_map =

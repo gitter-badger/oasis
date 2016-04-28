@@ -34,6 +34,11 @@ sig
   sig
     include Map.S
 
+    val find_opt : key -> 'a t -> 'a option
+
+    (** find key, or return the given value *)
+    val find_or : 'a -> key -> 'a t ->  'a
+
     (** Extends a map with an association list. *)
     val add_list: 'a t -> (key * 'a) list -> 'a t
 
@@ -87,6 +92,36 @@ module SetStringCsl: SetExt.S with type elt = String.t
 *)
 module HashStringCsl: Hashtbl.S with type key = String.t
 
+(** {2 Iterator} *)
+
+module Seq : sig
+  type +'a t = ('a -> unit) -> unit
+  val empty : 'a t
+  val cons : 'a -> 'a t -> 'a t
+  val return : 'a -> 'a t
+  val map : ('a -> 'b) -> 'a t -> 'b t
+  val flat_map : ('a -> 'b t) -> 'a t -> 'b t
+  val filter : ('a -> bool) -> 'a t -> 'a t
+  val filter_map : ('a -> 'b option) -> 'a t -> 'b t
+  val fold : ('a -> 'b -> 'a) -> 'a -> 'b t -> 'a
+  val of_list : 'a list -> 'a t
+  val to_list : 'a t -> 'a list
+  val to_list_rev : 'a t -> 'a list
+end
+
+
+(** {2 Pairs} *)
+module Pair : sig
+  type ('a, 'b) t = 'a * 'b
+  val swap : ('a, 'b) t -> ('b, 'a) t
+end
+
+(** {2 Lists} *)
+module L : sig
+  val init : int -> (int -> 'a) -> 'a list
+  val filter_map : ('a -> 'b option) -> 'a list -> 'b list
+  val flat_map : ('a -> 'b list) -> 'a list -> 'b list
+end
 
 (** {2 Variable name} *)
 
@@ -103,13 +138,13 @@ val varname_of_string: ?hyphen:char -> string -> string
 *)
 val varname_concat: ?hyphen:char -> string -> string -> string
 
-
 (** [is_varname str] Check that the string [str] is a valid varname. See
     {!varname_of_string} for definition.
 *)
 val is_varname: string -> bool
 
 (** {2 Comparisons} *)
+
 module Ord : sig
   type 'a t = 'a -> 'a -> int
 
@@ -128,9 +163,19 @@ end
 *)
 val failwithf: ('a, unit, string, 'b) format4 -> 'a
 
+(** [finally ~h ~ff x] calls [f x] and returns its result;
+    whether [f x] succeeds or fails, [h x] will be called *)
+val finally : h:('a -> unit) -> f:('a -> 'b) -> 'a -> 'b
+
+(** {2 Infix } *)
+
+module Infix : sig
+  val (|>) : 'a -> ('a -> 'b) -> 'b
+end
+
+include module type of Infix
 
 (** {2 String} *)
-
 
 (** Caseless compare function
 *)
@@ -162,5 +207,16 @@ sig
   (** [unescape s] returns a string [s'] removing all backslashes
       preceding a char. *)
   val unescape: string -> string
+end
+
+module IO : sig
+  val read_lines : in_channel -> string list
+  val with_file_in :
+    ?flags:open_flag list -> ?perm:int -> string -> (in_channel -> 'a) -> 'a
+  val with_file_out :
+    ?flags:open_flag list -> ?perm:int -> string -> (out_channel -> 'a) -> 'a
+
+  val output_line : out_channel -> string -> unit
+  val output_lines : out_channel -> string list -> unit
 end
 

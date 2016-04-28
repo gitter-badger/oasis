@@ -26,7 +26,7 @@ type elt =
   | BlankLine
 
 
-type t = elt list 
+type t = elt list
 
 (* END EXPORT *)
 
@@ -126,17 +126,11 @@ let rec pp_print fmt =
       ()
 
 
-let to_string t =
-  let buff = Buffer.create 13 in
-  let fmt = Format. formatter_of_buffer buff in
-  pp_print fmt t;
-  pp_print_flush fmt ();
-  Buffer.contents buff
-
+let to_string t = FormatExt.to_string pp_print t
 
 let value =
   {
-    parse  = (fun ~ctxt s -> of_string s);
+    parse  = (fun ~ctxt:_ s -> of_string s);
     update = update_fail;
     print  = to_string;
   }
