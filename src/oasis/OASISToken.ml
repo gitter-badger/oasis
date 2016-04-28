@@ -1,3 +1,4 @@
+
 (******************************************************************************)
 (* OASIS: architecture for building OCaml libraries and applications          *)
 (*                                                                            *)
@@ -20,11 +21,30 @@
 (* Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA              *)
 (******************************************************************************)
 
+(** {1 Tokens for the Parser} *)
 
-(** AST manipulation
-    @author Sylvain Le Gall
-*)
-
-open OASISTypes
-
-val to_package : OASISRecDescParser.conf -> Lexing.lexbuf -> package
+type t =
+  | COLON
+  | COLON_PLUS
+  | COLON_DOLLAR
+  | INDENT of int
+  | IF
+  | ELSE
+  | LBRACE
+  | RBRACE
+  | FLAG
+  | LIBRARY
+  | EXECUTABLE
+  | TEST
+  | SOURCE_REPO
+  | DOCUMENT
+  | OBJECT
+  | OR
+  | NOT
+  | AND
+  | LPAREN
+  | RPAREN
+  | TRUE
+  | FALSE
+  | IDENT of string
+  | EOF

@@ -33,7 +33,7 @@ open OASISUtils
 open OASISExpr
 open OASISContext
 open OASISMessage
-open Genlex
+open OASISToken
 
 
 (** Configuration for parsing and checking
@@ -48,7 +48,7 @@ type conf =
 type line_pos = int
 type char_pos = int
 
-
+(* one toplevel statement, either single-line or multi-line (indentation based) *)
 type t =
   | RealLine of line_pos * char_pos * string (* line, begin char, data *)
   | BlockBegin
@@ -56,443 +56,418 @@ type t =
   | StringBegin
   | StringEnd
 
+let is_blank =
+  function
+    | ' ' | '\r' | '\t' -> true
+    | _ -> false
 
-let parse_stream conf st =
+let position conf lineno charno =
+  Printf.sprintf
+    (f_ "in file '%s' at line %d, char %d")
+    (match conf.oasisfn with
+      | Some fn -> fn
+      | None -> "<>")
+    lineno
+    charno
 
-  let is_blank =
-    function
-      | ' ' | '\r' | '\t' -> true
-      | _ -> false
-  in
+(** Lazy list used for efficient composition *)
+module L = struct
+  type 'a t = unit -> 'a cell
+  and 'a cell = Nil | Cons of 'a * 'a t
 
-  let position lineno charno =
-    Printf.sprintf
-      (f_ "in file '%s' at line %d, char %d")
-      (match conf.oasisfn with
-        | Some fn -> fn
-        | None -> "<>")
-      lineno
-      charno
-  in
+  let nil () = Nil
+  let return x () = Cons (x, nil)
+  let rec map f l () = match l () with
+    | Nil -> Nil
+    | Cons (x,tl) -> Cons (x,map f tl)
 
-  (* Override OASISMessage functions *)
-  let debug fmt =
-    debug ~ctxt:conf.ctxt fmt
-  in
-  let warning fmt =
-    warning ~ctxt:conf.ctxt fmt
-  in
+  let rec repeat n x () = if n<=0 then Nil else Cons (x, repeat (n-1) x)
 
-  let apply_transformations ops =
+  let rec append l1 l2 () = match l1 () with
+    | Nil -> l2 ()
+    | Cons (x, l1') -> Cons (x, append l1' l2)
+
+  let mapi f l =
+    let rec aux f l i () = match l() with
+      | Nil -> Nil
+      | Cons (x, tl) ->
+        Cons (f i x, aux f tl (i+1))
+    in
+    aux f l 0
+
+  let rec fold f acc res = match res () with
+    | Nil -> acc
+    | Cons (s, cont) -> fold f (f acc s) cont
+
+  let rec flat_map f l () = match l () with
+    | Nil -> Nil
+    | Cons (x, l') ->
+      _flat_map_app f (f x) l' ()
+  and _flat_map_app f l l' () = match l () with
+    | Nil -> flat_map f l' ()
+    | Cons (x, tl) ->
+      Cons (x, _flat_map_app f tl l')
+
+  let rec filter p l () = match l () with
+    | Nil -> Nil
+    | Cons (x, l') ->
+      if p x
+      then Cons (x, filter p l')
+      else filter p l' ()
+
+  let to_list_rev l = fold (fun acc x->x::acc) [] l
+  let to_list l = to_list_rev l |> List.rev
+
+  let of_list l =
+    let rec aux l () = match l with
+      | [] -> `Nil
+      | x::l' -> `Cons (x, aux l')
+    in aux l
+end
+
+(* apply a series of transformations on a [t L.t]
+   @param ops list of operations to perform *)
+let apply_transformations (conf:conf) ~ops l =
+  let debug fmt = debug ~ctxt:conf.ctxt fmt in
+  List.fold_left
+    (fun lines (msg, f) ->
+       debug "%s:" msg;
+       f lines)
+    l
+    ops
+
+(* create [abs n] blocks, End if [n<0], Begin otherwise*)
+let mk_blocks n =
+  if n<0 then L.repeat (abs n) BlockEnd else L.repeat n BlockBegin
+
+(* TODO: fold_flat_map or something like this, i.e. recursive function.
+   Be careful to add negative indent at the end *)
+let add_indent_blocks lines =
+  let lines, last_indent_level, _ =
     List.fold_left
-      (fun lines (msg, f) ->
-         let new_lines =
-           f lines
-         in
-         if conf.ctxt.debug && lines <> new_lines then
-           begin
-             let rec pp_lines mode =
-               function
-                 | RealLine (lineno, charstart, str) :: tl ->
-                   debug "%s%04d:%s->%s<-"
-                     mode
-                     lineno
-                     (String.make charstart ' ')
-                     str;
-                   pp_lines mode tl
-
-                 | (BlockBegin as e) :: tl
-                 | (BlockEnd as e) :: tl ->
-                   pp_blocks mode 1 e tl
-                 | StringBegin :: tl ->
-                   pp_lines "s" tl
-                 | StringEnd :: tl ->
-                   pp_lines " " tl
-                 | [] ->
-                   ()
-
-             and pp_blocks mode lvl e =
-               function
-                 | b :: tl when b = e ->
-                   pp_blocks mode (lvl + 1) e tl
-                 | lst ->
-                   debug "%s----:%s"
-                     mode
-                     (String.make
-                        lvl
-                        (match e with
-                          | BlockBegin -> '{'
-                          | BlockEnd   -> '}'
-                          | RealLine _ | StringBegin | StringEnd ->
-                            assert(false)));
-                   pp_lines mode lst
-             in
-
-             debug "%s:" msg;
-             pp_lines " " new_lines;
-             debug (f_ "EOF")
-           end
-         else if conf.ctxt.debug then
-           begin
-             debug (f_ "Nothing changed for '%s'") msg
-           end;
-         new_lines)
-      []
-      ops
-  in
-
-  let lines =
-    apply_transformations
-      [
-        "Extract all lines from the stream",
-        (fun _ ->
-           let lines =
-             ref []
-           in
-           let buff =
-             Buffer.create 13
-           in
-           let lineno =
-             ref 1
-           in
-           let add_line () =
-             lines := (RealLine (!lineno, 0, Buffer.contents buff)) :: !lines;
-             Buffer.clear buff;
-             incr lineno
-           in
-           Stream.iter
-             (function
-               | '\n' ->
-                 add_line ()
-               | c ->
-                 Buffer.add_char buff c)
-             st;
-           add_line ();
-           List.rev !lines);
-
-        "Get rid of MS-DOS file format",
-        List.map
-          (function
-            | RealLine (lineno, charstart, str) ->
-              begin
-                let len =
-                  String.length str
-                in
-                let str =
-                  if len > 0 && str.[len - 1] = '\r' then
-                    String.sub str 0 (len - 1)
-                  else
-                    str
-                in
-                RealLine (lineno, charstart, str)
-              end
-            | e -> e);
-
-        "Remove comments",
-        List.map
-          (function
-            | RealLine (lineno, charstart, str) ->
-              begin
-                try
-                  let idx =
-                    String.index str '#'
-                  in
-                  RealLine (lineno, charstart, String.sub str 0 idx)
-                with Not_found ->
-                  RealLine(lineno, charstart, str)
-              end
-            | e -> e);
-
-        "Remove trailing whitespaces",
-        List.map
-          (function
-            | RealLine (lineno, charstart, str) ->
-              begin
-                let pos =
-                  ref ((String.length str) - 1)
-                in
-                while !pos > 0 && is_blank str.[!pos] do
-                  decr pos
-                done;
-                RealLine(lineno, charstart, String.sub str 0 (!pos + 1))
-              end
-            | e -> e);
-
-        "Remove empty lines",
-        List.filter
-          (function
-            | RealLine (lineno, charstart, "") -> false
-            | _ -> true);
-
-        "Remove leading whitespaces and replace them with begin/end block",
-        (fun lines ->
-           let add_blocks n lst =
-             List.rev_append
-               (Array.to_list
-                  (Array.init
-                     (abs n)
-                     (if n < 0 then
-                        (fun _ -> BlockEnd)
-                      else
-                        (fun _ -> BlockBegin))))
-               lst
-           in
-           let lines, last_indent_level, _ =
-             List.fold_left
-               (fun (lines, prv_indent_level, only_tab) ->
-                  function
-                    | RealLine (lineno, charstart, str) ->
-                      begin
-                        let cur_indent_level, use_tab, use_space =
-                          let pos =
-                            ref 0
-                          in
-                          let use_tab =
-                            ref false
-                          in
-                          let use_space =
-                            ref false
-                          in
-                          while !pos < String.length str &&
-                                is_blank str.[!pos] do
-                            use_tab   := str.[!pos] = '\t' || !use_tab;
-                            use_space := (not (str.[!pos] = '\t')
-                                          || !use_space);
-                            incr pos
-                          done;
-                          !pos, !use_tab, !use_space
-                        in
-                        let only_tab =
-                          if use_space && use_tab then
-                            begin
-                              warning
-                                (f_ "Mixed use of '\\t' and ' ' to indent \
-                                     lines %s")
-                                (position lineno charstart);
-                              only_tab
-                            end
-                          else
-                            begin
-                              match only_tab with
-                                | Some use_tab_before ->
-                                  if use_tab_before && not use_tab then
-                                    warning
-                                      (f_ "Use of ' ' but '\\t' was used \
-                                           before to indent lines %s")
-                                      (position lineno charstart);
-                                  if not use_tab_before && use_tab then
-                                    warning
-                                      (f_ "Use of '\\t' but ' ' was used \
-                                           before to indent lines %s")
-                                      (position lineno charstart);
-
-                                  only_tab
-                                | None ->
-                                  Some use_tab
-                            end
-                        in
-                        let charstart =
-                          charstart + cur_indent_level
-                        in
-                        let str =
-                          String.sub
-                            str
-                            cur_indent_level
-                            ((String.length str) - cur_indent_level)
-                        in
-                        let diff_indent_level =
-                          cur_indent_level - prv_indent_level
-                        in
-                        let lines =
-                          RealLine (lineno, charstart, str)
-                          ::
-                            add_blocks diff_indent_level lines
-                        in
-                        lines, cur_indent_level, only_tab
-                      end
-                    | BlockBegin as e ->
-                      (e :: lines), prv_indent_level + 1, only_tab
-                    | BlockEnd as e ->
-                      (e :: lines), prv_indent_level - 1, only_tab
-                    | StringBegin | StringEnd as e ->
-                      (e :: lines), prv_indent_level, only_tab)
-               ([], 0, None)
-               lines
-           in
-           List.rev
-             (add_blocks
-                (* Return back to indent level 0 *)
-                (~- last_indent_level)
-                lines));
-
-        "Split values and detect multi-line values",
-        (fun lines ->
-           let rec find_field acc =
-             function
-               | RealLine (lineno, charstart, str) as e :: tl ->
-                 begin
-                   try
-                     let colon_pos =
-                       String.index str ':'
-                     in
-                     let pos =
-                       ref (colon_pos + 1)
-                     in
-                     let () =
-                       while !pos < String.length str && is_blank str.[!pos] do
-                         incr pos
-                       done
-                     in
-                     let line_begin =
-                       RealLine (lineno, charstart,
-                         String.sub str 0 (colon_pos + 1))
-                     in
-                     let acc =
-                       if !pos < String.length str then
-                         begin
-                           (* Split end of line *)
-                           let line_end =
-                             RealLine
-                               (lineno,
-                                charstart + !pos,
-                                String.sub str !pos (String.length str - !pos))
-                           in
-                           line_end :: StringBegin :: line_begin :: acc
-                         end
-                       else
-                         begin
-                           StringBegin :: line_begin :: acc
-                         end
-                     in
-                     fetch_multiline acc 0 tl
-
-                   with Not_found ->
-                     find_field (e :: acc) tl
-                 end
-
-               | e :: tl ->
-                 find_field (e :: acc) tl
-
-               | [] ->
-                 List.rev acc
-
-           and fetch_multiline acc lvl lst =
-
-             let lvl_ref =
-               let rec count_block_begin lvl =
-                 function
-                   | BlockBegin :: tl ->
-                     (* Count the initial indentation (first line) *)
-                     count_block_begin (lvl + 1) tl
-                   | lst ->
-                     lvl
+      (fun (lines, prv_indent_level, only_tab) ->
+         function
+           | RealLine (lineno, charstart, str) ->
+             begin
+               let cur_indent_level, use_tab, use_space =
+                 let pos =
+                   ref 0
+                 in
+                 let use_tab =
+                   ref false
+                 in
+                 let use_space =
+                   ref false
+                 in
+                 while !pos < String.length str &&
+                       is_blank str.[!pos] do
+                   use_tab   := str.[!pos] = '\t' || !use_tab;
+                   use_space := (not (str.[!pos] = '\t')
+                                 || !use_space);
+                   incr pos
+                 done;
+                 !pos, !use_tab, !use_space
                in
-               count_block_begin lvl lst
-             in
+               let only_tab =
+                 if use_space && use_tab then
+                   begin
+                     warning
+                       (f_ "Mixed use of '\\t' and ' ' to indent \
+                            lines %s")
+                       (position lineno charstart);
+                     only_tab
+                   end
+                 else
+                   begin
+                     match only_tab with
+                       | Some use_tab_before ->
+                         if use_tab_before && not use_tab then
+                           warning
+                             (f_ "Use of ' ' but '\\t' was used \
+                                  before to indent lines %s")
+                             (position lineno charstart);
+                         if not use_tab_before && use_tab then
+                           warning
+                             (f_ "Use of '\\t' but ' ' was used \
+                                  before to indent lines %s")
+                             (position lineno charstart);
 
-             let rec fetch_multiline_nxt acc lvl =
+                         only_tab
+                       | None ->
+                         Some use_tab
+                   end
+               in
+               let charstart =
+                 charstart + cur_indent_level
+               in
+               let str =
+                 String.sub
+                   str
+                   cur_indent_level
+                   ((String.length str) - cur_indent_level)
+               in
+               let diff_indent_level =
+                 cur_indent_level - prv_indent_level
+               in
+               let lines =
+                 RealLine (lineno, charstart, str)
+                 ::
+                   mk_blocks diff_indent_level lines
+               in
+               lines, cur_indent_level, only_tab
+             end
+           | BlockBegin as e ->
+             (e :: lines), prv_indent_level + 1, only_tab
+           | BlockEnd as e ->
+             (e :: lines), prv_indent_level - 1, only_tab
+           | StringBegin | StringEnd as e ->
+             (e :: lines), prv_indent_level, only_tab)
+      ([], 0, None)
+      lines
+  in
+  List.rev
+    (add_blocks
+       (* Return back to indent level 0 *)
+       (~- last_indent_level)
+       lines))
+
+let parse_lines (conf:conf) (lines:t L.t) =
+  let warning fmt = warning ~ctxt:conf.ctxt fmt in
+  apply_transformations conf lines
+    ~ops:[
+      "Get rid of MS-DOS file format",
+      L.map
+        (function
+          | RealLine (lineno, charstart, str) ->
+            begin
+              let len =
+                String.length str
+              in
+              let str =
+                if len > 0 && str.[len - 1] = '\r' then
+                  String.sub str 0 (len - 1)
+                else
+                  str
+              in
+              RealLine (lineno, charstart, str)
+            end
+          | e -> e);
+
+      "Remove comments",
+      L.map
+        (function
+          | RealLine (lineno, charstart, str) ->
+            begin
+              try
+                let idx =
+                  String.index str '#'
+                in
+                RealLine (lineno, charstart, String.sub str 0 idx)
+              with Not_found ->
+                RealLine(lineno, charstart, str)
+            end
+          | e -> e);
+
+      "Remove trailing whitespaces",
+      L.map
+        (function
+          | RealLine (lineno, charstart, str) ->
+            begin
+              let pos =
+                ref ((String.length str) - 1)
+              in
+              while !pos > 0 && is_blank str.[!pos] do
+                decr pos
+              done;
+              RealLine(lineno, charstart, String.sub str 0 (!pos + 1))
+            end
+          | e -> e);
+
+      "Remove empty lines",
+      L.filter
+        (function
+          | RealLine (_, _, "") -> false
+          | _ -> true);
+
+      "Remove leading whitespaces and replace them with begin/end block",
+      add_indent_blocks;
+
+      "Split values and detect multi-line values",
+      (fun lines ->
+         let rec find_field acc =
+           function
+             | RealLine (lineno, charstart, str) as e :: tl ->
+               begin
+                 try
+                   let colon_pos =
+                     String.index str ':'
+                   in
+                   let pos =
+                     ref (colon_pos + 1)
+                   in
+                   let () =
+                     while !pos < String.length str && is_blank str.[!pos] do
+                       incr pos
+                     done
+                   in
+                   let line_begin =
+                     RealLine (lineno, charstart,
+                       String.sub str 0 (colon_pos + 1))
+                   in
+                   let acc =
+                     if !pos < String.length str then
+                       begin
+                         (* Split end of line *)
+                         let line_end =
+                           RealLine
+                             (lineno,
+                              charstart + !pos,
+                              String.sub str !pos (String.length str - !pos))
+                         in
+                         line_end :: StringBegin :: line_begin :: acc
+                       end
+                     else
+                       begin
+                         StringBegin :: line_begin :: acc
+                       end
+                   in
+                   fetch_multiline acc 0 tl
+
+                 with Not_found ->
+                   find_field (e :: acc) tl
+               end
+
+             | e :: tl ->
+               find_field (e :: acc) tl
+
+             | [] ->
+               List.rev acc
+
+         and fetch_multiline acc lvl lst =
+
+           let lvl_ref =
+             let rec count_block_begin lvl =
                function
                  | BlockBegin :: tl ->
-                   fetch_multiline_nxt acc (lvl + 1) tl
-
-                 | BlockEnd :: tl ->
-                   if lvl > 1 then
-                     fetch_multiline_nxt acc (lvl - 1) tl
-                   else if lvl = 1 then
-                     find_field (StringEnd :: acc) tl
-                   else
-                     find_field (StringEnd :: acc) (BlockEnd :: tl)
-
-                 | RealLine (lineno, charstart, str) as e :: tl ->
-                   if lvl > 0 then
-                     let diff =
-                       lvl - lvl_ref
-                     in
-                     if diff < 0 then
-                       failwithf
-                         (f_ "Unexpected indentation line %d.")
-                         lineno;
-                     fetch_multiline_nxt
-                       (RealLine
-                          (lineno,
-                           charstart - diff,
-                           String.make diff ' ' ^ str) :: acc)
-                       lvl
-                       tl
-                   else
-                     find_field (StringEnd :: acc) (e :: tl)
-
-                 | (StringBegin as e) :: tl
-                 | (StringEnd as e) :: tl ->
-                   if lvl > 0 then
-                     fetch_multiline_nxt acc lvl tl
-                   else
-                     find_field (StringEnd :: acc) (e :: tl)
-
-                 | [] ->
-                   find_field (StringEnd :: acc) []
+                   (* Count the initial indentation (first line) *)
+                   count_block_begin (lvl + 1) tl
+                 | lst ->
+                   lvl
              in
-             fetch_multiline_nxt acc lvl lst
+             count_block_begin lvl lst
            in
 
-           find_field [] lines);
+           let rec fetch_multiline_nxt acc lvl =
+             function
+               | BlockBegin :: tl ->
+                 fetch_multiline_nxt acc (lvl + 1) tl
 
+               | BlockEnd :: tl ->
+                 if lvl > 1 then
+                   fetch_multiline_nxt acc (lvl - 1) tl
+                 else if lvl = 1 then
+                   find_field (StringEnd :: acc) tl
+                 else
+                   find_field (StringEnd :: acc) (BlockEnd :: tl)
 
-        "Replace line containing '.' only by blank line",
-        (let rec replace_dot =
-           function
-             | (RealLine (l1, _, _) as e1) ::
-                 RealLine (l2, c, ".") ::
-                 (RealLine (l3, _, _) as e2) ::
-                 tl when l1 <> l2 && l2 <> l3 ->
-               e1 :: RealLine (l2, c, "") :: replace_dot (e2 :: tl)
+               | RealLine (lineno, charstart, str) as e :: tl ->
+                 if lvl > 0 then
+                   let diff =
+                     lvl - lvl_ref
+                   in
+                   if diff < 0 then
+                     failwithf
+                       (f_ "Unexpected indentation line %d.")
+                       lineno;
+                   fetch_multiline_nxt
+                     (RealLine
+                        (lineno,
+                         charstart - diff,
+                         String.make diff ' ' ^ str) :: acc)
+                     lvl
+                     tl
+                 else
+                   find_field (StringEnd :: acc) (e :: tl)
 
-             | (RealLine (l1, _, _) as e1) ::
-                 RealLine (l2, c, ".") ::
-                 StringEnd :: tl when l1 <> l2 ->
-               e1 :: RealLine (l2, c, "") :: StringEnd :: lookup_string tl
+               | (StringBegin as e) :: tl
+               | (StringEnd as e) :: tl ->
+                 if lvl > 0 then
+                   fetch_multiline_nxt acc lvl tl
+                 else
+                   find_field (StringEnd :: acc) (e :: tl)
 
-             | e :: tl ->
-               e :: replace_dot tl
-
-             | [] ->
-               []
-
-         and lookup_string =
-           function
-             | StringBegin :: tl ->
-               StringBegin :: replace_dot tl
-             | e :: tl ->
-               e :: lookup_string tl
-             | [] ->
-               []
+               | [] ->
+                 find_field (StringEnd :: acc) []
+           in
+           fetch_multiline_nxt acc lvl lst
          in
-         lookup_string);
 
-        "Add EOL",
-        (let rec concat_string =
-           function
-             | RealLine (l1, charstart, str) ::
-                 ((RealLine (l2, _, _) :: _) as tl) when l2 <> l1 ->
-               RealLine (l1, charstart, str^"\n") :: concat_string tl
-             | StringEnd :: tl ->
-               StringEnd :: lookup_string tl
-             | hd :: tl ->
-               hd :: concat_string tl
-             | [] ->
-               []
-         and lookup_string =
-           function
-             | StringBegin :: tl ->
-               StringBegin :: concat_string tl
-             | e :: tl ->
-               e :: lookup_string tl
-             | [] ->
-               []
-         in
-         lookup_string)
-      ]
+         find_field [] lines);
+
+
+      "Replace line containing '.' only by blank line",
+      (let rec replace_dot =
+         function
+           | (RealLine (l1, _, _) as e1) ::
+               RealLine (l2, c, ".") ::
+               (RealLine (l3, _, _) as e2) ::
+               tl when l1 <> l2 && l2 <> l3 ->
+             e1 :: RealLine (l2, c, "") :: replace_dot (e2 :: tl)
+
+           | (RealLine (l1, _, _) as e1) ::
+               RealLine (l2, c, ".") ::
+               StringEnd :: tl when l1 <> l2 ->
+             e1 :: RealLine (l2, c, "") :: StringEnd :: lookup_string tl
+
+           | e :: tl ->
+             e :: replace_dot tl
+
+           | [] ->
+             []
+
+       and lookup_string =
+         function
+           | StringBegin :: tl ->
+             StringBegin :: replace_dot tl
+           | e :: tl ->
+             e :: lookup_string tl
+           | [] ->
+             []
+       in
+       lookup_string);
+
+      "Add EOL",
+      (let rec concat_string =
+         function
+           | RealLine (l1, charstart, str) ::
+               ((RealLine (l2, _, _) :: _) as tl) when l2 <> l1 ->
+             RealLine (l1, charstart, str^"\n") :: concat_string tl
+           | StringEnd :: tl ->
+             StringEnd :: lookup_string tl
+           | hd :: tl ->
+             hd :: concat_string tl
+           | [] ->
+             []
+       and lookup_string =
+         function
+           | StringBegin :: tl ->
+             StringBegin :: concat_string tl
+           | e :: tl ->
+             e :: lookup_string tl
+           | [] ->
+             []
+       in
+       lookup_string)
+    ]
+
+let parse_lines (conf:conf) lines =
+  let lines = 
+    L.mapi
+      (fun i line -> RealLine (i, 0, line))
+      (L.of_list lines)
   in
+  (* preprocess the lines *)
+  let lines = parse_lines conf lines in
 
   let position, st =
     let lineno =
@@ -566,21 +541,7 @@ let parse_stream conf st =
   in
 
   (* Lexer for OASIS language *)
-  let lexer =
-    make_lexer
-      [
-        (* Statement *)
-        "+:"; "$:"; ":"; "if"; "{"; "}"; "else";
-        (* Section *)
-        "Flag"; "Library"; "Object"; "Executable";
-        "SourceRepository"; "Test";
-        "Document";
-        (* Expression *)
-        "!"; "&&"; "||"; "("; ")";
-        (* Boolean *)
-        "true"; "True"; "TRUE"; "false"; "False"; "FALSE"
-      ]
-  in
+  let next_tok() = OASISLexer.token lexbuf in
 
   (* OASIS expression *)
   let rec parse_factor =

@@ -33,7 +33,4 @@ type conf =
     ctxt:    OASISContext.t;
   }
 
-type line_pos = int
-type char_pos = int
-
-val parse_stream : conf -> char Stream.t -> OASISAstTypes.top_stmt
+val parse_lines : conf -> string list -> OASISAstTypes.top_stmt

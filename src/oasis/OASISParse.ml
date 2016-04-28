@@ -20,26 +20,24 @@
 (* Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA              *)
 (******************************************************************************)
 
+open OASISUtils
 open OASISRecDescParser
 
 let default_oasis_fn = "_oasis"
 
-
-let from_stream ~ctxt ?fn st =
-  OASISAst.to_package {oasisfn = fn; ctxt = ctxt} st
+let from_lines ~ctxt ?fn lines =
+  OASISAst.to_package {oasisfn = fn; ctxt = ctxt} lines
 
 let from_file ~ctxt fn =
-  let chn = open_in fn in
-  let pkg =
-    from_stream ~ctxt ~fn (Stream.of_channel chn)
-  in
-  close_in chn;
-  pkg
-
+  IO.with_file_in fn
+    (fun ic ->
+       let lines = IO.read_lines ic in
+       from_lines ~ctxt lines)
 
 (** [from_string ~conf str] Parse the OASIS string [str] and check it using
     context [conf].
 *)
 let from_string ~ctxt ?fn str =
-  from_stream ~ctxt ?fn (Stream.of_string str)
+  let lines = OASISString.split_newline str in
+  from_lines ~ctxt ?fn lines
 

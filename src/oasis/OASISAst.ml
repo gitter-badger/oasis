@@ -36,8 +36,8 @@ module P = OASISRecDescParser
 
 (** Convert OASIS stream into package
 *)
-let to_package conf st =
-  let ast = P.parse_stream conf st in
+let to_package conf lexbuf =
+  let ast = P.parse_stream conf lexbuf in
 
   (* Merge an expression with a condition in a ctxt *)
   let ctxt_add_expr ctxt e =

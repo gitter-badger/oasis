@@ -34,18 +34,11 @@ open OASISTypes
 (** Default name of _oasis. *)
 val default_oasis_fn: host_filename
 
-(** [from_stream ~ctxt ~ignore_plugins ~fn st] Parse the OASIS file [~fn] and
-    check it. If [~ignore_plugins] is set, ignore unknown plugin's fields in the
-    file.
-*)
-val from_stream:
-  ctxt:OASISContext.t ->
-  ?fn:host_filename ->
-  (char Stream.t) ->
-  package
-
-
-(** See {!from_stream}, apply to a filename.
+(* FIXME: old comment? *)
+(** [from_file ~ctxt fn]:
+    Parse the OASIS file [fn] and
+    check it.
+    If [~ignore_plugins] is set, ignore unknown plugin's fields in the file.
 *)
 val from_file:
   ctxt:OASISContext.t ->
@@ -53,7 +46,7 @@ val from_file:
   package
 
 
-(** See {!from_stream}, apply to a string.
+(** See {!from_file}, apply to a string.
 *)
 val from_string:
   ctxt:OASISContext.t ->

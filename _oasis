@@ -103,6 +103,8 @@ Library oasis
                    OASISQuickstart,
                    OASISHelp,
                    OASISFormat,
+                   OASISLexer,
+                   OASISToken,
                    OASISSection_intern,
                    OASISBuildSection_intern,
                    OASISDocument_intern,
