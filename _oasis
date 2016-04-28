@@ -117,7 +117,7 @@ Library oasis
                    OASISPath_intern
   CompiledObject: Best
   BuildDepends: unix (>= 0.0.11)
-  BuildTools+: ocamlyacc, ocamllex, oasis_ocamlify
+  BuildTools+: ocamlyacc, ocamllex
   XMETADescription: _oasis file functions
   Install$: flag(libraries)
 
